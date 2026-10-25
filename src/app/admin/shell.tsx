@@ -2,6 +2,7 @@ import Link from "next/link";
 import { requireAdmin } from "@/lib/admin-page";
 import type { AdminRow } from "@/lib/admin-auth";
 import { BodyAdmin } from "@/app/admin/body-admin";
+import { SessionPing } from "@/app/admin/session-ping";
 import { signOut } from "@/app/admin/actions";
 import "./admin.css";
 
@@ -35,6 +36,7 @@ export async function AdminShell({
   return (
     <>
       <BodyAdmin />
+      <SessionPing />
       <div className="adm">
         <nav className="adm-nav" aria-label="Admin">
           {NAV.map(([href, label]) => {

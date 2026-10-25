@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { BodyAdmin } from "@/app/admin/body-admin";
+import { SessionPing } from "@/app/admin/session-ping";
 import { LoginForm } from "@/app/admin/login-form";
 import "../admin.css";
 
@@ -14,6 +15,7 @@ export default function AdminLoginPage() {
   return (
     <>
       <BodyAdmin />
+      <SessionPing redirectWhenAlive />
       <div className="adm">
         <main className="adm-main">
           <div className="narrow">

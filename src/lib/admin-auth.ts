@@ -20,8 +20,31 @@ export const ACCESS_COOKIE = "w3e_admin_at";
 export const REFRESH_COOKIE = "w3e_admin_rt";
 export const SEEN_COOKIE = "w3e_admin_seen";
 const IDLE_SECONDS = 7200;
+const ROLL_EVERY = 300;
 
 export type AdminRow = { id: string; email: string; disabled_at: string | null; last_login_at: string | null };
+
+type CookieJarLike = {
+  get(name: string): { value: string } | undefined;
+  set(name: string, value: string, opts?: Record<string, unknown>): unknown;
+};
+
+/**
+ * True when cookie WRITES are allowed in the current execution context. Next.js
+ * page renders may only read cookies — writes throw there. Detect once per call
+ * with a harmless same-value probe instead of letting the real write crash.
+ */
+function jarWritable(jar: CookieJarLike, opts: Record<string, unknown>): boolean {
+  const current = jar.get(SEEN_COOKIE)?.value ?? "0";
+  try {
+    jar.set(SEEN_COOKIE, current, opts);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+const SEEN_OPTS = { httpOnly: true, sameSite: "lax" as const, path: "/", secure: ENV.isProduction, maxAge: IDLE_SECONDS };
 
 async function setSessionCookies(
   access: string,
@@ -29,24 +52,30 @@ async function setSessionCookies(
   maxAge: number,
 ): Promise<void> {
   const jar = await cookies();
+  if (!jarWritable(jar, SEEN_OPTS)) return; // render context: tokens are persisted in a route/action instead
   const opts = { httpOnly: true, sameSite: "lax" as const, path: "/", secure: ENV.isProduction };
   jar.set(ACCESS_COOKIE, access, { ...opts, maxAge });
   jar.set(REFRESH_COOKIE, refresh, { ...opts, maxAge });
-  jar.set(SEEN_COOKIE, String(Math.floor(Date.now() / 1000)), { httpOnly: true, sameSite: "lax", path: "/", secure: ENV.isProduction, maxAge: IDLE_SECONDS });
+  jar.set(SEEN_COOKIE, String(Math.floor(Date.now() / 1000)), SEEN_OPTS);
 }
 
 export async function clearSessionCookies(): Promise<void> {
   const jar = await cookies();
+  if (!jarWritable(jar, SEEN_OPTS)) return; // render context: reads still treat the session as over
   for (const c of [ACCESS_COOKIE, REFRESH_COOKIE, SEEN_COOKIE]) {
     jar.set(c, "", { httpOnly: true, sameSite: "lax", path: "/", secure: ENV.isProduction, maxAge: 0 });
   }
+}
+
+/** Route-handler probe: same verification as currentAdmin; cookie writes persist here. */
+export async function pingAdmin(): Promise<AdminRow | null> {
+  return currentAdmin();
 }
 
 /** Verify the current request's admin session. Returns the admins row, or null. */
 export async function currentAdmin(): Promise<AdminRow | null> {
   const jar = await cookies();
   const at = jar.get(ACCESS_COOKIE)?.value;
-  if (!at) return null;
 
   // idle timeout
   const seen = Number(jar.get(SEEN_COOKIE)?.value ?? "0");
@@ -55,10 +84,17 @@ export async function currentAdmin(): Promise<AdminRow | null> {
     return null;
   }
 
+  if (!at) {
+    // Access token absent/expired: restore from the refresh token when the
+    // context allows persisting the result (route handlers / server actions).
+    const refreshed = await tryRefresh();
+    return refreshed ? adminRowFor(refreshed.userId) : null;
+  }
+
   // verify JWT with Supabase (validates signature + expiry)
   const { data, error } = await anonClient().auth.getUser(at);
   if (error || !data?.user) {
-    // token may be expired: try refresh
+    // token may be expired: try refresh (no-op in render contexts — see tryRefresh)
     const refreshed = await tryRefresh();
     if (!refreshed) return null;
     return adminRowFor(refreshed.userId);
@@ -70,6 +106,9 @@ async function tryRefresh(): Promise<{ userId: string; access: string; refresh: 
   const jar = await cookies();
   const rt = jar.get(REFRESH_COOKIE)?.value;
   if (!rt) return null;
+  // Refresh tokens ROTATE on use — never refresh when the new tokens cannot be
+  // persisted (page render), or the old token would be burned for nothing.
+  if (!jarWritable(jar, SEEN_OPTS)) return null;
   const { data, error } = await anonClient().auth.refreshSession({ refresh_token: rt });
   if (error || !data?.session) return null;
   await setSessionCookies(data.session.access_token, data.session.refresh_token, IDLE_SECONDS);
@@ -81,11 +120,13 @@ async function adminRowFor(userId: string): Promise<AdminRow | null> {
     db().from("admins").select("id, email, disabled_at, last_login_at").eq("id", userId).maybeSingle(),
   )) as AdminRow | null;
   if (!row || row.disabled_at !== null) return null;
-  // Roll the idle timer forward on every successful check.
+  // Roll the idle timer forward on every successful check (route/action contexts;
+  // renders keep the old stamp — the session-ping route covers pure-browsing).
   const jar = await cookies();
   const seen = Number(jar.get(SEEN_COOKIE)?.value ?? "0");
-  if (Date.now() / 1000 - seen > 300) {
-    jar.set(SEEN_COOKIE, String(Math.floor(Date.now() / 1000)), { httpOnly: true, sameSite: "lax", path: "/", secure: ENV.isProduction, maxAge: IDLE_SECONDS });
+  if (!jarWritable(jar, SEEN_OPTS)) return row;
+  if (Date.now() / 1000 - seen > ROLL_EVERY) {
+    jar.set(SEEN_COOKIE, String(Math.floor(Date.now() / 1000)), SEEN_OPTS);
   }
   return row;
 }
