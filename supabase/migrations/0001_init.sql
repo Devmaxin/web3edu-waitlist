@@ -287,7 +287,7 @@ begin
       insert into public.members
         (waitlist_id, email, email_canonical, display_name, avatar, referral_code, device_hash, ip_hash)
       values
-        (wid, p_email, p_email_canonical, nullif(p_display_name, ''), p_avatar, code, p_device_hash, p_ip_hash)
+        (wid, p_email, p_email_canonical, nullif(p_display_name, ''), nullif(p_avatar, ''), code, p_device_hash, p_ip_hash)
       returning id into new_id;
       exit;
     exception when unique_violation then

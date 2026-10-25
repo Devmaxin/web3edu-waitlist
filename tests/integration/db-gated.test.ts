@@ -6,6 +6,7 @@
  * the test run, so email jobs stay pending).
  */
 import { afterAll, describe, expect, it } from "vitest";
+import { createHash } from "node:crypto";
 import { db } from "@/lib/db";
 import { referralCodeRegex, waitlistIdRegex } from "@/lib/signup";
 
@@ -16,8 +17,10 @@ const RUN = (process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").includes(".supabase.co"
 
 const PREFIX = "w3e-it-";
 const madeMemberIds: number[] = [];
-const ipHashFixed = "it".repeat(32); // hex-ish stable per run, distinct from real hashes
-const deviceHash = (s: string) => `it-dev-${s}`;
+// App-shaped values: sha256 hex (64 chars) for hashes, ≤48-char token for the pass secret.
+const hex64 = (s: string) => createHash("sha256").update(s).digest("hex");
+const ipHashFixed = hex64("w3e-it-integration-run"); // stable per run, distinct from real IPs
+const deviceHash = (s: string) => hex64(`w3e-it-dev:${s}`);
 
 type JoinResult = { status: string; member_id?: number; referral?: string; error?: string };
 async function joinWaitlist(p: {
@@ -31,13 +34,13 @@ async function joinWaitlist(p: {
     p_email: p.email,
     p_email_canonical: p.email.toLowerCase(),
     p_display_name: p.name ?? "Integration test",
-    p_avatar: p.avatar ?? "",
+    p_avatar: p.avatar ?? null,
     p_referral_code: p.ref ?? null,
     p_ip_hash: ipHashFixed,
     p_device_hash: deviceHash(p.device ?? p.email),
-    p_pass_secret: `secret-for-${p.email}`, // never used to derive in tests; only stored
-    p_qr_hash: `qrhash-${p.email}`,
-    p_view_hash: `viewhash-${p.email}`,
+    p_pass_secret: hex64(`w3e-it-pass:${p.email}`).slice(0, 43), // stored, never derived in tests
+    p_qr_hash: hex64(`w3e-it-qr:${p.email}`),
+    p_view_hash: hex64(`w3e-it-view:${p.email}`),
   });
   if (r.error) throw new Error(`join_waitlist: ${r.error.message}`);
   return r.data as JoinResult;
@@ -65,6 +68,17 @@ function uniqueEmail(tag: string): string {
 
 describe.skipIf(!RUN)("join_waitlist (staging DB)", () => {
   it("creates a member in one transaction: member + pass + ledger + outbox row", async () => {
+    // Reward rules ship INACTIVE (the owner sets points in the admin UI). Temporarily
+    // activate the signup rule to exercise the award path, then restore the seed state.
+    await db().from("reward_rules").update({ points: 5, is_active: true }).eq("event_type", "waitlist_signup");
+    try {
+      await assertFullSignupFlow();
+    } finally {
+      await db().from("reward_rules").update({ points: null, is_active: false }).eq("event_type", "waitlist_signup");
+    }
+  }, 30_000);
+
+  async function assertFullSignupFlow(): Promise<void> {
     const email = uniqueEmail("a");
     const r = await joinWaitlist({ email });
     expect(r.status).toBe("created");
@@ -93,7 +107,7 @@ describe.skipIf(!RUN)("join_waitlist (staging DB)", () => {
 
     const jobs = (await db().from("email_jobs").select("kind, status").eq("member_id", id)).data;
     expect(jobs).toContainEqual({ kind: "signup_confirmation", status: "pending" });
-  }, 30_000);
+  }
 
   it("treats a duplicate signup as exists and never leaks member data", async () => {
     const email = uniqueEmail("b");
