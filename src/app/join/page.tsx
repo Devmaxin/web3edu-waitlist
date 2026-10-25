@@ -1,6 +1,6 @@
 import { signupsOpen } from "@/lib/settings";
 import { cookies } from "next/headers";
-import { referrerCodeFromCookie, deviceTokenCookie } from "@/lib/signup";
+import { referrerCodeFromCookie } from "@/lib/signup";
 import { makeTimeTrap } from "@/lib/bot-trap";
 import { metadata } from "./metadata";
 import JoinFlow from "@/components/join-flow";
@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic";
 export default async function JoinPage() {
   const jar = await cookies();
   const invited = referrerCodeFromCookie(jar) !== null;
-  deviceTokenCookie(jar); // ensures the device cookie exists
+  // The device cookie is issued by middleware (server components can't set cookies).
   const open = await signupsOpen();
   const trap = makeTimeTrap();
 

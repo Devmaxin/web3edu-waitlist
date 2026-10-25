@@ -22,6 +22,16 @@ function b64url(buf: ArrayBuffer): string {
   return btoa(bin).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
 }
 
+/**
+ * Random device chip used for abuse heuristics (hashed at submit time; raw value is
+ * never stored). Issued here because server components cannot set cookies in Next.
+ */
+function issueDeviceToken(): string {
+  const buf = new ArrayBuffer(24);
+  crypto.getRandomValues(new Uint8Array(buf));
+  return b64url(buf);
+}
+
 /** Web Crypto port of lib/crypto.ts derive(): double HMAC, purpose-separated. */
 async function signWithAppKey(purpose: string, payload: string): Promise<string> {
   const appKeyB64 = process.env.APP_KEY ?? "";
@@ -41,6 +51,13 @@ async function signWithAppKey(purpose: string, payload: string): Promise<string>
 }
 
 export async function middleware(req: NextRequest) {
+  // ── 0. device chip (anonymous, hashed server-side) ────────────────────────
+  let devIssued = "";
+  if (!req.cookies.get("w3e_dev")) {
+    devIssued = issueDeviceToken();
+    req.cookies.set("w3e_dev", devIssued); // make it visible to this request's server code too
+  }
+
   let res: NextResponse;
 
   // ── 1. ?ref=CODE capture ───────────────────────────────────────────────
@@ -63,13 +80,15 @@ export async function middleware(req: NextRequest) {
           secure: process.env.NODE_ENV === "production",
           maxAge: 30 * 86400,
         });
+        if (devIssued) setDeviceCookie(res, devIssued);
         res.headers.set("Cache-Control", "no-store");
         return res;
       }
     }
   }
 
-  res = NextResponse.next();
+  res = NextResponse.next({ request: req });
+  if (devIssued) setDeviceCookie(res, devIssued);
 
   // ── 2. headers ─────────────────────────────────────────────────────────
   const isPreview = /^\/admin\/campaigns\/\d+\/preview\/?$/.test(req.nextUrl.pathname);
@@ -102,6 +121,17 @@ export async function middleware(req: NextRequest) {
   }
 
   return res;
+}
+
+/** Signed referral/member cookies stay HttpOnly; the device chip is the same shape. */
+function setDeviceCookie(res: NextResponse, token: string): void {
+  res.cookies.set("w3e_dev", token, {
+    httpOnly: true,
+    sameSite: "lax",
+    path: "/",
+    secure: process.env.NODE_ENV === "production",
+    maxAge: 365 * 86400,
+  });
 }
 
 export const config = {

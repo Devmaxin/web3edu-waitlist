@@ -111,8 +111,9 @@ export function referrerCodeFromCookie(cookieGetter: { get: (name: string) => { 
 /** Random device cookie used only for abuse checks. */
 export function deviceTokenCookie(cookieGetter: CookieSetter): string {
   const existing = cookieGetter.get(DEV_COOKIE)?.value ?? "";
+  // Middleware issues a 32-char base64url chip; keep the legacy Crockford shape valid too.
   if (/^[A-Za-z0-9_-]{32}$/.test(existing)) return existing;
-  const t = code(24);
+  const t = code(32);
   cookieGetter.set(DEV_COOKIE, t, { httpOnly: true, sameSite: "lax", path: "/", maxAge: 365 * 86400 });
   return t;
 }
