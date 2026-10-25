@@ -34,10 +34,10 @@ export default async function AdminMemberPage({
   const pts = await balance(id);
   const ledger = (await qOrNull(db().from("points_ledger").select("*").eq("member_id", id).order("id", { ascending: false }).limit(100))) as Tx[] | null;
   const referredBy = (await qOrNull(
-    db().from("referrals").select("status, reason, members(waitlist_id)").eq("referred_id", id).maybeSingle(),
+    db().from("referrals").select("status, reason, members!referrals_referred_id_fkey(waitlist_id)").eq("referred_id", id).maybeSingle(),
   )) as { status: string; reason: string | null; members: { waitlist_id: string } } | null;
   const referred = (await qOrNull(
-    db().from("referrals").select("status, reason, created_at, members(waitlist_id)").eq("referrer_id", id).order("id", { ascending: false }).limit(50),
+    db().from("referrals").select("status, reason, created_at, members!referrals_referrer_id_fkey(waitlist_id)").eq("referrer_id", id).order("id", { ascending: false }).limit(50),
   )) as Array<{ status: string; reason: string | null; created_at: string; members: { waitlist_id: string } }> | null;
   const pass = (await qOrNull(db().from("passes").select("version, revoked_at, created_at").eq("member_id", id).maybeSingle())) as
     | { version: number; revoked_at: string | null; created_at: string }
