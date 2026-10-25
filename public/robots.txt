@@ -1,0 +1,8 @@
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /p/
+Disallow: /q/
+Disallow: /qr/
+Disallow: /welcome
+Disallow: /u/
