@@ -1,3 +1,7 @@
+// Dynamic on purpose: the CSP nonce comes from middleware per request; a statically
+// prerendered page would embed non-nonce scripts that browsers block (blank page).
+export const dynamic = "force-dynamic";
+
 export default function UnsubDone() {
   return (
     <main id="main" className="lockcard">

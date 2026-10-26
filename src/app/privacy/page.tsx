@@ -5,7 +5,10 @@ export const metadata: Metadata = {
   title: "Privacy notice · Web3Edu waitlist",
 };
 
-export const dynamic = "force-static";
+// Dynamic on purpose: the CSP nonce comes from middleware per request. A statically
+// prerendered page would embed scripts without the nonce, browsers would block them,
+// and hydration would fail to a blank page.
+export const dynamic = "force-dynamic";
 
 export default function Privacy() {
   const pe = ENV.privacyEmail;
