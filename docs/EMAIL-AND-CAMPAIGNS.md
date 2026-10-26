@@ -41,6 +41,30 @@ Cron is optional; at minimum set `CRON_SECRET` so the endpoint is not fully iner
 
 The campaign detail page shows per-state counts; the Emails page filters by status with per-status counts. Campaign rows carry a `(C#)` marker on the Emails page.
 
+## Launch Campaign panel (Emails admin)
+
+`/admin/emails` has a **Launch Campaign** section operating on the newest campaign (or `?c=<id>`): status label (Draft / Ready / Sending / Completed / Paused / Cancelled), eligible / successfully sent / failed / pending / suppressed counts, and queued / sending-started / completed timestamps — persisted in `campaigns.started_at` and `campaigns.completed_at` (migration 0004; before it is applied the panel simply omits the times).
+
+Panel flow, top to bottom:
+
+1. **Destination** — the email's "Explore Web3Edu" button target, stored in the existing `main_register_url` setting (same setting as Launch controls; never auto-replaced). Editing requires password reauth and `https://` validation (`validSiteUrl`).
+2. **Preview** — the sandboxed iframe of the real rendered email (first member's sample data).
+3. **Test email** — up to 10/hour/admin, `[TEST]`-prefixed, no outbox row.
+4. **Queue** — phrase `SEND <count>` + password reauth (count re-checked live). `queue_campaign` now also enforces the launch flag inside the RPC: launch OFF → `-2` ("Blocked: turn public launch ON first").
+5. **Send & monitor** — Start / Pause / Cancel remaining / Retry failed, plus the in-page BatchRunner while `sending`.
+
+### Launch email specifics
+
+- Subject `Web3Edu is officially live!`, heading "You're in. Web3Edu is live.", CTA "Explore Web3Edu" (destination URL), secondary link "View your waitlist pass", per-member QR + waitlist ID. Blank `intro_text` falls back to the suggested body copy.
+- The QR `<img>` uses the **PNG** endpoint `/qr/<qr-token>` (`qrImgUrl`); the QR itself encodes the member's `/q/<token>` pass landing page. `/qr` obeys the launch lock: pre-launch every token (valid or not) gets an identical 404, except an admin session can still fetch a PNG for the preview/test flow.
+- `new?launch=1` on the campaign form prefills a launch draft (`/admin/campaigns/new?launch=1` or the panel's "Create launch draft (prefilled)" button).
+
+### Duplicate prevention & retries
+
+- `email_jobs` carries a **unique index on `(campaign_id, member_id)`** (migration 0004) — one campaign can never hold two rows for one member.
+- Idempotency-Key = `campaign:<id>:member:<id>`; Resend dedupes on it for 24 h, so a retry after a timed-out request cannot produce a double send.
+- "Retry failed" re-queues **only** rows with status `failed`; `accepted`/`delivered` rows are never resent.
+
 ## Manual pass resend
 
 `/admin/members/<id>` → "Resend pass email" queues a `pass_resend` job deduplicated per 15-minute window (`pass_resend:<id>:<quarter>`). "Rotate pass" invalidates old QR/pass URLs immediately.

@@ -18,6 +18,7 @@ Pick one path:
 1. Open the Supabase dashboard → **SQL Editor** → New query.
 2. Paste the full contents of `supabase/migrations/0001_init.sql` and run it.
 3. Then paste `supabase/migrations/0002_seed.sql` and run it.
+4. Then paste `supabase/migrations/0004_campaign_launch_hardening.sql` and run it (adds `campaigns.started_at`/`completed_at`, a unique `(campaign_id, member_id)` outbox index, and the launch flag inside `queue_campaign`).
 
 **Path B — Supabase CLI:**
 
@@ -69,7 +70,7 @@ Copy `.env.example` → `.env.local` locally, and set the same keys in Vercel �
 npm install
 npm run dev        # http://localhost:3000
 npm run build      # production build
-npm run test       # unit tests (52)
+npm run test       # unit tests (63)
 npm run test:integration   # DB-gated suite; runs only when staging vars are present
 ```
 
