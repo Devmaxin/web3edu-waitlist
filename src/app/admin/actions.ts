@@ -16,6 +16,7 @@ import { randomHex } from "@/lib/crypto";
 import { rateLimitAllow } from "@/lib/rate-limit";
 import { insertAuditLog } from "@/lib/audit";
 import { flashUrl } from "@/app/admin/shell";
+import { validSiteUrl } from "@/lib/campaign-view";
 
 /* ── session ─────────────────────────────────────────────────────────────── */
 
@@ -193,7 +194,7 @@ export async function launchAction(fd: FormData): Promise<void> {
       break;
     case "save_url": {
       const u = String(fd.get("main_register_url") ?? "").trim();
-      if (u !== "" && !/^https:\/\/[A-Za-z0-9.-]+([^\s"<>]*)$/.test(u)) {
+      if (u !== "" && !validSiteUrl(u)) {
         redirect(flashUrl("/admin/launch", "URL must start with https:// and contain no spaces.", false));
       }
       await setSetting("main_register_url", u);
@@ -209,7 +210,17 @@ export async function launchAction(fd: FormData): Promise<void> {
 export async function emailsAction(fd: FormData): Promise<void> {
   const admin = await require();
   const act = String(fd.get("action") ?? "");
-  if (act === "retry_failed") {
+  if (act === "save_dest") {
+    if (!(await reauth(admin, fd))) redirect(flashUrl("/admin/emails", "Password confirmation failed. URL unchanged.", false));
+    const u = String(fd.get("main_register_url") ?? "").trim();
+    if (!validSiteUrl(u)) {
+      redirect(flashUrl("/admin/emails", "URL must start with https:// and contain no spaces.", false));
+    }
+    const { setSetting } = await import("@/lib/settings");
+    await setSetting("main_register_url", u);
+    await insertAuditLog("admin", admin.id, "email.save_dest", null, u.slice(0, 100));
+    redirect(flashUrl("/admin/emails", "Main website destination saved."));
+  } else if (act === "retry_failed") {
     const { data, error } = await db()
       .from("email_jobs")
       .update({ status: "pending", attempts: 0, next_attempt_at: new Date().toISOString(), last_error: null })
@@ -336,6 +347,7 @@ export async function campaignAction(fd: FormData): Promise<void> {
       redirect(flashUrl(home, `Queue failed: ${error.message}`, false));
     }
     const n = Number(data ?? -1);
+    if (n === -2) redirect(flashUrl(home, "Blocked: turn public launch ON first.", false));
     if (n < 0) redirect(flashUrl(home, "This campaign was already queued.", false));
     await insertAuditLog("admin", admin.id, "campaign.queue", `campaign:${id}`, `recipients=${n}`);
     redirect(flashUrl(home, `Queued ${n} recipient(s). Nothing is sent until you press Start sending below.`));
@@ -352,7 +364,7 @@ export async function campaignAction(fd: FormData): Promise<void> {
         .eq("campaign_id", id)
         .eq("status", "pending");
     }
-    await db().from("campaigns").update({ status: CAM_ACTIONS[act] }).eq("id", id);
+    await db().from("campaigns").update(CAM_ACTIONS[act] === "sending" ? { status: "sending", started_at: new Date().toISOString() } : { status: CAM_ACTIONS[act] }).eq("id", id);
     await insertAuditLog("admin", admin.id, `campaign.${act}`, `campaign:${id}`);
     redirect(flashUrl(home, `Done: ${act}.`));
   }
@@ -379,7 +391,7 @@ export async function campaignAction(fd: FormData): Promise<void> {
 export async function processBatch(campaignId: number): Promise<{ ok: boolean; status?: string; remaining?: number | null; paused?: boolean; sent?: number; retry?: number; failed?: number; suppressed?: number; claimed?: number }> {
   const admin = await currentAdmin();
   if (!admin) return { ok: false };
-  const c = (await qOrNull(db().from("campaigns").select("status").eq("id", campaignId).maybeSingle())) as { status: string } | null;
+  const c = (await qOrNull(db().from("campaigns").select("status, started_at").eq("id", campaignId).maybeSingle())) as { status: string; started_at: string | null } | null;
   if (!c) return { ok: false };
   if (c.status !== "sending") return { ok: true, status: c.status, remaining: null, paused: true };
   const r = await processEmailJobs(5, campaignId);
@@ -390,7 +402,11 @@ export async function processBatch(campaignId: number): Promise<{ ok: boolean; s
     .in("status", ["pending", "sending"]);
   const left = count ?? 0;
   if (left === 0) {
-    await db().from("campaigns").update({ status: "done" }).eq("id", campaignId).eq("status", "sending");
+    const now = new Date().toISOString();
+    // Final transition. started_at keeps its real value when "Start" was pressed;
+    // an external pinger (no Start press) gets started=completed=now.
+    const patch: Record<string, unknown> = { status: "done", completed_at: now, started_at: c.started_at ?? now };
+    await db().from("campaigns").update(patch).eq("id", campaignId).eq("status", "sending");
   }
   return { ok: true, status: left === 0 ? "done" : "sending", remaining: left, ...r };
 }

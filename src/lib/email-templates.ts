@@ -11,6 +11,9 @@ import { passTokens } from "./pass";
 import { db } from "./db";
 import type { MemberRow } from "./pass";
 import type { OutboundMessage } from "./resend-client";
+import { validSiteUrl } from "./campaign-view";
+
+export { validSiteUrl }; // re-export for existing importers (tests, admin actions)
 
 export type EmailKind = "signup_confirmation" | "pass_resend" | "launch_announcement" | "claim_link";
 
@@ -81,24 +84,34 @@ export async function renderEmail(job: { kind: string; campaign_id: number | nul
     const refEarned = await referralPoints(mid);
     if (refEarned > 0) facts.push(["…of which from referrals", String(refEarned)]);
     const lines = [hi];
-    for (const p of c.intro_text.trim().split(/\r?\n\r?\n+/)) {
-      if (p.trim() !== "") lines.push(p.trim());
+    if (c.intro_text.trim() === "" || c.intro_text.includes("{{ LAUNCH_INTRO }}")) {
+      // Sensible default body for the launch announcement when the draft ships bare.
+      lines.push(
+        "You joined our waitlist because you wanted to be part of what we’re building. Now Web3Edu is live, and we’re excited to welcome you.",
+      );
+      lines.push("Your personal waitlist pass is below. Keep it for your records, and use the link below to explore Web3Edu.");
+    } else {
+      for (const p of c.intro_text.trim().split(/\r?\n\r?\n+/)) {
+        if (p.trim() !== "") lines.push(p.trim());
+      }
     }
     const reg = await registerUrl();
     const lines2 = [
       `To continue, create your Web3Edu account using this same email address (${member.email}). That is how your account is matched to your waitlist entry; there is nothing to claim.`,
     ];
-    const qr = pt.qrUrl;
+    // The emailed <img> must be a real image: /qr/<token> serves a PNG per member.
+    // pt.qrUrl (the /q HTML page) is what the QR itself encodes, and it obeys the launch lock.
+    const qr = pt.qrImgUrl;
     return compose(
       c.subject,
-      "Web3Edu is opening",
+      "You’re in. Web3Edu is live.",
       lines,
       facts,
       lines2,
-      reg !== "" ? "Create your Web3Edu account" : "Open your pass",
+      reg !== "" ? "Explore Web3Edu" : "Open your pass",
       reg !== "" ? reg : viewUrl,
       qr,
-      reg !== "" ? [["Your pass", viewUrl]] : [],
+      reg !== "" ? [["View your waitlist pass", viewUrl]] : [],
       true,
       member,
       c.preheader ?? "",
@@ -111,7 +124,7 @@ export async function renderEmail(job: { kind: string; campaign_id: number | nul
 export async function registerUrl(): Promise<string> {
   const { getSetting } = await import("./settings");
   const s = await getSetting("main_register_url", "");
-  return /^https:\/\/[A-Za-z0-9.-]+([^\s"<>]*)$/.test(s) ? s : "";
+  return validSiteUrl(s.trim()) ? s.trim() : "";
 }
 
 type Fact = [string, string];

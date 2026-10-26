@@ -28,7 +28,7 @@ export function urlFor(pathKind: "p" | "q" | "qr", token: string): string {
   return `${base}/${pathKind}/${token}`;
 }
 
-export type PassTokens = { version: number; qrToken: string; viewToken: string; qrUrl: string; viewUrl: string };
+export type PassTokens = { version: number; qrToken: string; viewToken: string; qrUrl: string; qrImgUrl: string; viewUrl: string };
 
 /** Re-derive both tokens for one member (fails clearly if the pass row is missing). */
 export async function passTokens(memberId: number): Promise<PassTokens> {
@@ -36,7 +36,14 @@ export async function passTokens(memberId: number): Promise<PassTokens> {
   if (!row) throw new Error(`pass missing for member ${memberId}`);
   const qt = hmacToken(row.pass_secret, "qr", row.version);
   const vt = hmacToken(row.pass_secret, "view", row.version);
-  return { version: row.version, qrToken: qt, viewToken: vt, qrUrl: urlFor("q", qt), viewUrl: urlFor("p", vt) };
+  return {
+    version: row.version,
+    qrToken: qt,
+    viewToken: vt,
+    qrUrl: urlFor("q", qt),
+    qrImgUrl: urlFor("qr", qt), // PNG image endpoint — the URL embedded as <img> in emails
+    viewUrl: urlFor("p", vt),
+  };
 }
 
 export async function passVersion(memberId: number): Promise<number> {
