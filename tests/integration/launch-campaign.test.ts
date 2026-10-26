@@ -115,23 +115,36 @@ describe.skipIf(SKIP)("launch campaign (staging DB, 0004 applied)", () => {
     expect(jobsOff).toBe(0);
     expect(((await db().from("campaigns").select("status").eq("id", cid).maybeSingle()).data as { status: string }).status).toBe("draft");
 
-    // launch ON → exactly 1 eligible row; unsubscribed member excluded
+    // launch ON → queued for EVERY eligible member (also real ones on this
+    // staging waitlist); our unsubscribed member must be excluded
     await db().from("settings").upsert({ k: "launch_public", v: "1", updated_at: new Date().toISOString() });
     const on = await db().rpc("queue_campaign", { p_campaign_id: cid });
-    expect(on.data).toBe(1);
-    const rows = (await db().from("email_jobs").select("member_id, kind, idempotency_key").eq("campaign_id", cid)).data;
-    expect(rows).toEqual([
-      expect.objectContaining({
-        member_id: m1.member_id,
-        kind: "launch_announcement",
-        idempotency_key: `campaign:${cid}:member:${m1.member_id}`,
-      }),
-    ]);
+    expect(on.data as number).toBeGreaterThanOrEqual(1);
+    const rows = (await db().from("email_jobs").select("member_id, kind, idempotency_key").eq("campaign_id", cid)).data as
+      | Array<{ member_id: number; kind: string; idempotency_key: string }>
+      | null;
+    const rowFor = new Map((rows ?? []).map((r) => [r.member_id, r]));
+    expect(rowFor.get(m1.member_id as number)).toEqual({
+      member_id: m1.member_id,
+      kind: "launch_announcement",
+      idempotency_key: `campaign:${cid}:member:${m1.member_id}`,
+    });
+    expect(rowFor.has(m2.member_id as number)).toBe(false); // unsubscribed → excluded
+    // exactly one row per member (no duplicates from the insert)
+    expect(new Set((rows ?? []).map((r) => r.member_id)).size).toBe((rows ?? []).length);
     // campaign flipped to queued
-    expect(((await db().from("campaigns").select("status, queued_at").eq("id", cid).maybeSingle()).data as { status: string }).status).toBe("queued");
+    expect(((await db().from("campaigns").select("status").eq("id", cid).maybeSingle()).data as { status: string }).status).toBe("queued");
 
-    // re-queue → -1 (already queued), still exactly one row per member
+    // re-queue → -1 (already queued)
     expect((await db().rpc("queue_campaign", { p_campaign_id: cid })).data).toBe(-1);
+
+    // DEFENCE-IN-DEPTH for this suite: real members must never sit in a test
+    // campaign's outbox — strip everyone but our two test members right away.
+    await db()
+      .from("email_jobs")
+      .delete()
+      .eq("campaign_id", cid)
+      .not("member_id", "in", `(${memberIds.join(",")})`);
   }, 30_000);
 
   it("one row per member per campaign: the unique index blocks duplicates", async () => {
@@ -144,7 +157,13 @@ describe.skipIf(SKIP)("launch campaign (staging DB, 0004 applied)", () => {
     const m = await joinWaitlist(email);
     memberIds.push(m.member_id as number);
     const q = await db().rpc("queue_campaign", { p_campaign_id: cid });
-    expect(q.data).toBe(1);
+    expect(q.data as number).toBeGreaterThanOrEqual(1);
+    // keep only our test member's row in this campaign (see defence-in-depth note)
+    await db()
+      .from("email_jobs")
+      .delete()
+      .eq("campaign_id", cid)
+      .neq("member_id", m.member_id as number);
     const row = (await db().from("email_jobs").select("id").eq("campaign_id", cid).maybeSingle()).data as { id: number };
     expect(row).not.toBeNull();
 
@@ -167,7 +186,14 @@ describe.skipIf(SKIP)("launch campaign (staging DB, 0004 applied)", () => {
     const email = `${PREFIX}claim${stamp()}@integration.invalid`;
     const m = await joinWaitlist(email);
     memberIds.push(m.member_id as number);
-    expect((await db().rpc("queue_campaign", { p_campaign_id: cid })).data).toBe(1);
+    expect((await db().rpc("queue_campaign", { p_campaign_id: cid })).data).toBeGreaterThanOrEqual(1);
+    // Real members must never be claimable from a test campaign: strip all rows
+    // except our test member's BEFORE the campaign ever reaches 'sending'.
+    await db()
+      .from("email_jobs")
+      .delete()
+      .eq("campaign_id", cid)
+      .neq("member_id", m.member_id as number);
 
     // queued (≠ sending) → nothing claimable, even though the job is pending
     const gated = await db().rpc("claim_email_jobs", { p_worker: "it-lc", p_limit: 10, p_campaign_id: cid });
