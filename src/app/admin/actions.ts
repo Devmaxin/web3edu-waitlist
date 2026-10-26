@@ -364,7 +364,11 @@ export async function campaignAction(fd: FormData): Promise<void> {
         .eq("campaign_id", id)
         .eq("status", "pending");
     }
-    await db().from("campaigns").update(CAM_ACTIONS[act] === "sending" ? { status: "sending", started_at: new Date().toISOString() } : { status: CAM_ACTIONS[act] }).eq("id", id);
+    await db().from("campaigns").update({ status: CAM_ACTIONS[act] }).eq("id", id);
+    if (CAM_ACTIONS[act] === "sending" && (await campaignsHaveTimes())) {
+      // 0004: persist the first start (panel "Sending started"). Fails soft pre-migration.
+      await db().from("campaigns").update({ started_at: new Date().toISOString() }).eq("id", id);
+    }
     await insertAuditLog("admin", admin.id, `campaign.${act}`, `campaign:${id}`);
     redirect(flashUrl(home, `Done: ${act}.`));
   }
@@ -391,7 +395,14 @@ export async function campaignAction(fd: FormData): Promise<void> {
 export async function processBatch(campaignId: number): Promise<{ ok: boolean; status?: string; remaining?: number | null; paused?: boolean; sent?: number; retry?: number; failed?: number; suppressed?: number; claimed?: number }> {
   const admin = await currentAdmin();
   if (!admin) return { ok: false };
-  const c = (await qOrNull(db().from("campaigns").select("status, started_at").eq("id", campaignId).maybeSingle())) as { status: string; started_at: string | null } | null;
+  const hasTimes = await campaignsHaveTimes();
+  const c = (await qOrNull(
+    db()
+      .from("campaigns")
+      .select(hasTimes ? "status, started_at" : "status")
+      .eq("id", campaignId)
+      .maybeSingle(),
+  )) as { status: string; started_at: string | null } | null;
   if (!c) return { ok: false };
   if (c.status !== "sending") return { ok: true, status: c.status, remaining: null, paused: true };
   const r = await processEmailJobs(5, campaignId);
@@ -405,13 +416,32 @@ export async function processBatch(campaignId: number): Promise<{ ok: boolean; s
     const now = new Date().toISOString();
     // Final transition. started_at keeps its real value when "Start" was pressed;
     // an external pinger (no Start press) gets started=completed=now.
-    const patch: Record<string, unknown> = { status: "done", completed_at: now, started_at: c.started_at ?? now };
+    const patch: Record<string, unknown> = { status: "done" };
+    if (hasTimes) {
+      patch.completed_at = now;
+      patch.started_at = c.started_at ?? now;
+    }
     await db().from("campaigns").update(patch).eq("id", campaignId).eq("status", "sending");
   }
   return { ok: true, status: left === 0 ? "done" : "sending", remaining: left, ...r };
 }
 
 /* ── helpers ─────────────────────────────────────────────────────────────── */
+
+// Memoised per invocation (serverless lives are short): does migration 0004's
+// campaigns.started_at/completed_at exist yet? Guarded against Placeholders, read only.
+let timesProbe: boolean | null = null;
+export async function campaignsHaveTimes(): Promise<boolean> {
+  if (timesProbe === null) {
+    const { error } = await db()
+      .from("campaigns")
+      .select("started_at", { head: true, count: "exact" })
+      .eq("id", -1)
+      .limit(0);
+    timesProbe = error === null;
+  }
+  return timesProbe;
+}
 
 async function require(): Promise<AdminRow> {
   const a = await currentAdmin();

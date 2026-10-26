@@ -24,6 +24,28 @@ type CampaignRow = {
 };
 
 const CAM_COLS = "id, name, status, min_points, created_at, queued_at, started_at, completed_at";
+const CAM_COLS_LEGACY = CAM_COLS.replace(", started_at, completed_at", "");
+
+/**
+ * Selected campaign: ?c= overrides, else the newest row. Before migration 0004 is
+ * applied the started_at/completed_at columns don't exist — the panel degrades to
+ * the legacy columns instead of 500-ing the whole page.
+ */
+async function fetchCampaign(chosen: number): Promise<CampaignRow | null> {
+  const withTimes =
+    chosen > 0
+      ? db().from("campaigns").select(CAM_COLS).eq("id", chosen).maybeSingle()
+      : db().from("campaigns").select(CAM_COLS).order("id", { ascending: false }).limit(1).maybeSingle();
+  try {
+    return (await qOrNull(withTimes)) as CampaignRow | null;
+  } catch {
+    const legacy =
+      chosen > 0
+        ? db().from("campaigns").select(CAM_COLS_LEGACY).eq("id", chosen).maybeSingle()
+        : db().from("campaigns").select(CAM_COLS_LEGACY).order("id", { ascending: false }).limit(1).maybeSingle();
+    return (await qOrNull(legacy)) as CampaignRow | null;
+  }
+}
 
 export default async function AdminEmails({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const sp = await searchParams;
@@ -33,10 +55,7 @@ export default async function AdminEmails({ searchParams }: { searchParams: Prom
   /* ── Launch Campaign panel data ────────────────────────────────────────── */
   const [dest, launchReady] = await Promise.all([registerUrl(), launchPublic()]);
   const chosen = Number(sp.c ?? 0);
-  const camp =
-    chosen > 0
-      ? ((await qOrNull(db().from("campaigns").select(CAM_COLS).eq("id", chosen).maybeSingle())) as CampaignRow | null)
-      : ((await qOrNull(db().from("campaigns").select(CAM_COLS).order("id", { ascending: false }).limit(1).maybeSingle())) as CampaignRow | null);
+  const camp = await fetchCampaign(chosen);
 
   let eligible = 0;
   const buckets: Record<string, number> = { sent: 0, failed: 0, pending: 0, suppressed: 0 };
