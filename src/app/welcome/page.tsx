@@ -85,6 +85,15 @@ export default async function Welcome() {
             <p>{refPts !== null ? `Each eligible referral earns you ${refPts} points.` : "No referral rewards have been announced yet."}</p>
           </div>
           <div className="info rise d7">
+            <h3>Stay in the loop</h3>
+            <p>
+              For updates and more information, join the official Web3Edu{" "}
+              <a href="https://whatsapp.com/channel/0029Vb9kqh79WtC6VCv2qB3Q" target="_blank" rel="noopener noreferrer">WhatsApp channel</a>{" "}
+              or follow us on{" "}
+              <a href="https://x.com/web3eduofficial" target="_blank" rel="noopener noreferrer">X (Twitter)</a>.
+            </p>
+          </div>
+          <div className="info rise d7">
             <h3>What happens next</h3>
             <p>Your pass stays locked until launch. We’ll email you when Web3Edu opens. When you create your Web3Edu account, use this same email address so it can be matched to your waitlist entry.</p>
           </div>

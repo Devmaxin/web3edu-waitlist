@@ -204,6 +204,10 @@ export default async function Landing({
               <img className="mark" src="/assets/img/logo-mark.png" width={76} height={76} alt="" />
               <h2><span className="w">Be</span> <span className="w">early.</span><br /><span className="w">Learn</span> <span className="w">Web3</span> <span className="w">with</span> <span className="w">us.</span></h2>
               <a className="btn btn-primary" href="/join">Join the waitlist<Icon name="arrow" className="arrow" /></a>
+              <p className="follow-a">
+                <a className="social" href="https://whatsapp.com/channel/0029Vb9kqh79WtC6VCv2qB3Q" target="_blank" rel="noopener noreferrer"><Icon name="whatsapp" />Join the WhatsApp channel</a>
+                <a className="social" href="https://x.com/web3eduofficial" target="_blank" rel="noopener noreferrer"><Icon name="x" />Follow us on X</a>
+              </p>
             </div>
           </div>
         </section>
@@ -212,6 +216,10 @@ export default async function Landing({
       <footer>
         <div className="wrap">
           <span>© {new Date().getFullYear()} Web3Edu</span>
+          <span className="follow-b">
+            <a href="https://whatsapp.com/channel/0029Vb9kqh79WtC6VCv2qB3Q" target="_blank" rel="noopener noreferrer"><Icon name="whatsapp" /> WhatsApp channel</a>
+            <a href="https://x.com/web3eduofficial" target="_blank" rel="noopener noreferrer"><Icon name="x" /> X (Twitter)</a>
+          </span>
           <FooterLinks />
         </div>
       </footer>

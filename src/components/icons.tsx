@@ -10,6 +10,9 @@ const PATHS: Record<string, string> = {
   copy: '<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/>',
   mail: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/>',
   flag: '<path d="M5 21V4M5 4h11l-2 4 2 4H5"/>',
+  x: '<path d="M4 4l16 16"/><path d="M20 4 4 20"/>',
+  whatsapp:
+    '<path d="M21 11.4a8.6 8.6 0 0 1-12.4 7.7L3 21l1.9-5.6A8.6 8.6 0 1 1 21 11.4z"/><path d="M9.3 9.2c.9 2.2 2.5 3.9 4.7 4.8l1.2-1.2 2 1.3c-.5 1.3-2 1.9-3.2 1.4a10 10 0 0 1-5.7-5.7c-.5-1.3.1-2.7 1.4-3.2l1.3 2-1.7 1.2z"/>',
 };
 
 export function Icon({ name, className }: { name: string; className?: string }) {

@@ -285,6 +285,16 @@ h2+.lead{margin-top:14px}
 .closer .btn{min-width:250px}
 .closer.in .btn-primary{animation:ringOnce 1.6s var(--ease-out) .9s 1}
 @keyframes ringOnce{0%{box-shadow:0 0 0 0 rgba(107,47,240,.5)}100%{box-shadow:0 0 0 22px rgba(107,47,240,0)}}
+/* Follow links (WhatsApp channel + X) — closer pills + compact footer row */
+.follow-a{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin:20px 0 0;padding:0}
+.social{display:inline-flex;align-items:center;gap:8px;padding:10px 18px;border:1px solid rgba(59,26,148,.22);border-radius:999px;font-weight:600;font-size:.92rem;color:var(--violet-ink);background:#fff;text-decoration:none;transition:border-color var(--t-fast),transform var(--t-fast) var(--ease-out),box-shadow var(--t-fast)}
+.social:hover{border-color:var(--violet);transform:translateY(-1px);box-shadow:0 10px 22px -12px rgba(107,47,240,.6)}
+.social:focus-visible{outline:3px solid var(--violet);outline-offset:3px;border-radius:999px}
+.social svg{width:15px;height:15px;color:var(--violet)}
+footer .follow-b{display:inline-flex;gap:16px;flex-wrap:wrap}
+footer .follow-b a{display:inline-flex;align-items:center;gap:6px}
+footer .follow-b a:hover{color:var(--muted)}
+footer .follow-b svg{width:14px;height:14px;color:inherit}
 footer{padding:40px 0 48px;color:var(--muted);font-size:.9rem}
 footer .wrap{display:flex;flex-wrap:wrap;gap:12px 24px;justify-content:space-between}
 footer a{color:var(--muted)}
