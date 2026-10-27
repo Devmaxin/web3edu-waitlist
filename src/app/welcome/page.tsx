@@ -10,6 +10,7 @@ import { avatarOf } from "@/lib/avatar";
 import { launchPublic } from "@/lib/settings";
 import { qrBits, qrSvg } from "@/lib/qr";
 import { PassCard } from "@/components/pass-card";
+import { FollowPopup } from "@/components/follow-popup";
 import type { MemberRow } from "@/lib/pass";
 
 export const metadata: Metadata = {
@@ -99,6 +100,7 @@ export default async function Welcome() {
           </div>
         </main>
       </div>
+      <FollowPopup />
       <script src="/assets/js/tick.js" defer />
     </>
   );

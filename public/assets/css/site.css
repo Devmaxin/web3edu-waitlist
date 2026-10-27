@@ -295,6 +295,19 @@ footer .follow-b{display:inline-flex;gap:16px;flex-wrap:wrap}
 footer .follow-b a{display:inline-flex;align-items:center;gap:6px}
 footer .follow-b a:hover{color:var(--muted)}
 footer .follow-b svg{width:14px;height:14px;color:inherit}
+/* Follow popup (welcome): slides in 3s after entry, bottom-right card on desktop */
+.follow-pop{position:fixed;left:14px;right:14px;bottom:calc(16px + env(safe-area-inset-bottom,0px));max-width:360px;margin:0 auto;z-index:60;background:#fff;border:1px solid var(--line);border-radius:20px;box-shadow:0 24px 50px -20px rgba(20,10,40,.35);padding:18px 20px 16px;animation:fpIn .45s var(--ease-pop) both}
+@media (min-width:600px){.follow-pop{left:auto;right:24px;bottom:24px;margin:0}}
+@keyframes fpIn{from{opacity:0;transform:translateY(14px) scale(.97)}to{opacity:1;transform:none}}
+.fp-x{position:absolute;top:10px;right:10px;width:30px;height:30px;border-radius:50%;background:var(--panel);color:var(--muted);border:none;display:grid;place-items:center;font-size:.9rem;line-height:1;cursor:pointer;transition:color var(--t-fast),background var(--t-fast)}
+.fp-x:hover{color:var(--ink);background:var(--panel-2)}
+.fp-x:focus-visible{outline:3px solid var(--violet);outline-offset:2px;border-radius:50%}
+.follow-pop h3{margin:0 0 5px;font-size:1.02rem;letter-spacing:-.01em}
+.follow-pop .fp-x+*{margin-right:34px}
+.follow-pop p{margin:0 0 12px;color:var(--ink-2);font-size:.92rem}
+.fp-links{display:flex;flex-wrap:wrap;gap:8px}
+.fp-links .social{padding:8px 14px;font-size:.88rem}
+@media (prefers-reduced-motion: reduce){.follow-pop{animation:none}}
 footer{padding:40px 0 48px;color:var(--muted);font-size:.9rem}
 footer .wrap{display:flex;flex-wrap:wrap;gap:12px 24px;justify-content:space-between}
 footer a{color:var(--muted)}
